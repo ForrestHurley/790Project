@@ -9,6 +9,7 @@
 #include "generate_random_points.h"
 #include "generate_sobol_points.h"
 #include "generate_halton_points.h"
+#include "generate_grid_points.h"
 
 #include "mc_integration.h"
 #include "radial_distribution.h"
@@ -20,10 +21,8 @@ double calc_mean(const std::vector<double>& values)
     return sum / values.size();
 }
 
-double calc_var(const std::vector<double>& values)
+double calc_var(const std::vector<double>& values, double mean)
 {
-    double mean = calc_mean(values);
-
     std::vector<double> diff(values.size());
     std::transform(
         values.begin(), values.end(), diff.begin(),
@@ -33,77 +32,114 @@ double calc_var(const std::vector<double>& values)
     return sq_sum / (values.size() - 1);
 }
 
-int main()
+template<class GeneratePointsType>
+void pi_integration(int number_of_samples = 2000)
 {
     int min_dimension = 2;
-    int max_dimension = 20;
-    int number_of_samples = 1000;
-    int total_iterations = 100;
+    int max_dimension = 12;
+    int total_iterations = 1000;
 
-    std::cout << "Running " << total_iterations 
-        << " iterations per dimension" << std::endl;
+    //std::cout << "Running " << total_iterations 
+    //    << " iterations per dimension with " <<
+    //    number_of_samples << " samples" << std::endl;
+    std::cout << "Dimension, Mean, Variance" << std::endl;
     
     for (int dim = min_dimension; dim <= max_dimension; dim++)
     {
-        std::cout << "Starting dimension " << dim << std::endl;
-
-        std::vector<double> rand_vect, sobol_vect, halton_vect;
+        std::vector<double> val_vect;
         for (int iteration = 0; iteration < total_iterations; iteration++)
         {
-            GenerateRandomPoints rand_gen(dim);
-            GenerateSobolPoints sobol_gen(dim);
-            GenerateHaltonPoints halton_gen(dim);
+            GeneratePointsType point_gen(dim);
+            point_gen.Reset(-1);
 
-            rand_gen.Reset(-1);
-            sobol_gen.Reset(-1);
-            halton_gen.Reset(-1);
-
-            std::vector<Coordinate>* random_points =
-                rand_gen.CreateNPoints(number_of_samples);
-            std::vector<Coordinate>* sobol_points =
-                sobol_gen.CreateNPoints(number_of_samples);
-            std::vector<Coordinate>* halton_points =
-                halton_gen.CreateNPoints(number_of_samples);
+            std::vector<Coordinate>* value_points =
+                point_gen.CreateNPoints(number_of_samples);
 
             IntegrablePi pi_func;
             MonteCarloIntegration mc_integrator(pi_func);
 
-            std::tuple<double, double> random_out = 
-                mc_integrator.IntegrateWithPoints(*random_points);
-            std::tuple<double, double> sobol_out = 
-                mc_integrator.IntegrateWithPoints(*sobol_points);
-            std::tuple<double, double> halton_out = 
-                mc_integrator.IntegrateWithPoints(*halton_points);
+            std::tuple<double, double> value_out = 
+                mc_integrator.IntegrateWithPoints(*value_points);
 
-            const double random_pi = IntegrablePi::EstimatePi(
-                    std::get<0>(random_out), dim);
-            const double sobol_pi = IntegrablePi::EstimatePi(
-                    std::get<0>(sobol_out), dim);
-            const double halton_pi = IntegrablePi::EstimatePi(
-                    std::get<0>(halton_out), dim);
+            const double value_pi = IntegrablePi::EstimatePi(
+                    std::get<0>(value_out), dim);
 
-            rand_vect.push_back(random_pi);
-            sobol_vect.push_back(sobol_pi);
-            halton_vect.push_back(halton_pi);
+            val_vect.push_back(value_pi);
 
-            delete random_points;
-            delete sobol_points;
-            delete halton_points;
+            delete value_points;
         }
 
-        double mean_rand = calc_mean(rand_vect);
-        double mean_sobol = calc_mean(sobol_vect);
-        double mean_halton = calc_mean(halton_vect);
+        double mean_val = calc_mean(val_vect);
 
-        double var_rand = calc_var(rand_vect);
-        double var_sobol = calc_var(sobol_vect);
-        double var_halton = calc_var(halton_vect);
+        const double pi = 3.14159265359;
+        double var_val = calc_var(val_vect, pi);
 
-        std::cout << "Calculated pi values:" << std::endl;
-        std::cout << "Mean | Variance" << std::endl;
-        std::cout << mean_rand << " | " << var_rand << std::endl;
-        std::cout << mean_sobol << " | " << var_sobol << std::endl;
-        std::cout << mean_halton << " | " << var_halton << std::endl;
+        std::cout << dim << ", " << mean_val << ", " << var_val << std::endl;
     }
+}
+
+template<class GeneratePointsType>
+void radial_calculation(int dim, int number_of_samples = 1000000, int number_of_iterations = 2500000, int side_count = -1)
+{
+    RadialDistribution dist_calc;
+    dist_calc.iterations = number_of_iterations;
+    dist_calc.r_step = 0.005;
+
+    GeneratePointsType point_gen(dim);
+    point_gen.Reset(-1);
+
+    std::vector<Coordinate>* value_points =
+        point_gen.CreateNPoints(number_of_samples);
+
+    std::vector<double> dist_values = dist_calc.CalculateDistribution(
+            *value_points, Coordinate(std::vector<double>(dim,1.)));
+
+    std::cout << "Radius, Density" << std::endl;
+    for (int i = 0; i < dist_values.size(); i++)
+        std::cout << i * dist_calc.r_step << ", " << dist_values.at(i) << std::endl;
+}
+
+
+template<>
+void radial_calculation<GenerateGridPoints>(
+        int dim, int number_of_samples, 
+        int number_of_iterations, int side_count)
+{
+    RadialDistribution dist_calc;
+    dist_calc.iterations = number_of_iterations;
+    dist_calc.r_step = 0.005;
+
+    if (side_count <= 0)
+        side_count = 4;
+
+    GenerateGridPoints point_gen(dim, side_count);
+    point_gen.Reset(-1);
+
+    std::vector<Coordinate>* value_points =
+        point_gen.CreateNPoints(number_of_samples);
+
+    std::vector<double> dist_values = dist_calc.CalculateDistribution(
+            *value_points, Coordinate(std::vector<double>(dim,1.)));
+
+    std::cout << "Radius, Density" << std::endl;
+    for (int i = 0; i < dist_values.size(); i++)
+        std::cout << i * dist_calc.r_step << ", " << dist_values.at(i) << std::endl;
+}
+
+int main()
+{
+    //pi_integration<GenerateRandomPoints>();
+    //pi_integration<GenerateSobolPoints>();
+    //pi_integration<GenerateHaltonPoints>();
+    
+    radial_calculation<GenerateRandomPoints>(2);
+    radial_calculation<GenerateRandomPoints>(6);
+    radial_calculation<GenerateSobolPoints>(2);
+    radial_calculation<GenerateSobolPoints>(6);
+    radial_calculation<GenerateHaltonPoints>(2);
+    radial_calculation<GenerateHaltonPoints>(6); 
+    radial_calculation<GenerateGridPoints>(2,1000000,2500000,1000);
+    radial_calculation<GenerateGridPoints>(6,1000000,2500000,10);
+
     return 0;
 }

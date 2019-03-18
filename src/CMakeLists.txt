@@ -7,6 +7,7 @@ set(MAIN_SOURCES
     generate_sobol_points.cxx
     generate_halton_points.cxx
     generate_moldyn_points.cxx
+    generate_grid_points.cxx
     KDTree.cxx
     main.cxx)
 

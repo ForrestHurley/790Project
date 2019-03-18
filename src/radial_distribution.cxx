@@ -8,8 +8,10 @@ std::vector<double> RadialDistribution::CalculateDistribution(
 {
     std::uniform_int_distribution<int> int_dist(0,points.size()-1);
     xorshift prng;
-    std::vector<int> counts(
-            (int)(range.getMagnitude()/2./r_step) + 1,0);
+    prng.reseed();
+    const int max_count = range.getMagnitude() / 2. / r_step + 1;
+    std::vector<int> counts(max_count,0);
+
     for (int i = 0; i < iterations; i++)
     {
         double dist =
@@ -25,7 +27,8 @@ std::vector<double> RadialDistribution::CalculateDistribution(
     for (int i = 0; i < counts.size(); i++)
     {
         densities[i] = (double)counts[i] / (double)iterations / 
-            (double)(std::pow(r_step * i,range.dimension - 1) * r_step);
+            (double)(std::pow(r_step * (i + 0.5),range.dimension - 1) * r_step);
     }
+
     return densities;
 }

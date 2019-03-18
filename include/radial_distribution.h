@@ -8,7 +8,7 @@ class RadialDistribution
 {
 public:
     int iterations = 1 << 20;
-    int r_step = 0.05;
+    double r_step = 0.05;
     std::vector<double> CalculateDistribution(
             const std::vector<Coordinate> &points, const Coordinate& range);
 };
